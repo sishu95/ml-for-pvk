@@ -13,7 +13,7 @@ from xgboost import XGBClassifier
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.ensemble import StackingClassifier
 
-data = pd.read_csv("new/MLcode/data.csv")
+data = pd.read_csv("/data/users/PVK/data.csv")
 X = data.iloc[:, 0:13].values
 Y = data.iloc[:, 14].values  
 X_new = np.delete(X, [4, 5], axis=1)
@@ -34,7 +34,7 @@ def optimize_model(pipeline, params, X, y):
         estimator=pipeline,
         param_grid=params,
         scoring='roc_auc_ovr', 
-        cv=StratifiedKFold(5, shuffle=True, random_state=42),
+        cv=StratifiedKFold(5, shuffle=True, random_state=100),
         n_jobs=-1,
         error_score='raise'
     )
@@ -42,9 +42,9 @@ def optimize_model(pipeline, params, X, y):
     return grid.best_estimator_, grid.best_params_
 
 svc_pipe = ImbPipeline([
-    ('sampler', SMOTE(random_state=42)),
+    ('sampler', SMOTE(random_state=84)),
     ('scaler', StandardScaler()),
-    ('model', SVC(probability=True, decision_function_shape='ovr', class_weight='balanced'))
+    ('model', SVC(probability=True, decision_function_shape='ovr', random_state=84))
 ])
 svc_params = {
     'model__C': [0.1, 1, 10],
@@ -57,7 +57,7 @@ print(svc_best_params)
 
 rf_pipe = ImbPipeline([
     ('sampler', SMOTE(random_state=42)),
-    ('model', RandomForestClassifier(class_weight='balanced'))
+    ('model', RandomForestClassifier( random_state=42))
 ])
 rf_params = {
     'model__n_estimators': [200, 400],
@@ -70,19 +70,22 @@ xgb_pipe = ImbPipeline([
     ('sampler', SMOTE(random_state=42)),
     ('model', XGBClassifier(
         objective='multi:softprob',
-        eval_metric='mlogloss'))
+        eval_metric='mlogloss', 
+        random_state=42))
 ])
 xgb_params = {
     'model__learning_rate': [0.05, 0.1],
-    'model__max_depth': [3, 5],
-    'model__subsample': [0.8, 1.0]
+    'model__max_depth': [3, 5, 7],        
+    'model__subsample': [0.8, 1.0],
+    'model__colsample_bytree': [0.6, 0.8, 1.0], 
+    'model__gamma': [0, 0.1, 1]            
 }
 best_xgb, xgb_best_params = optimize_model(xgb_pipe, xgb_params, X_train, y_train)
 
 lr_pipe = ImbPipeline([
-    ('sampler', SMOTE(random_state=42)),
+    ('sampler', SMOTE(random_state=55)),
     ('scaler', StandardScaler()),
-    ('model', OneVsRestClassifier(LogisticRegression(max_iter=10000))) 
+    ('model', OneVsRestClassifier(LogisticRegression(max_iter=10000, random_state=55))) 
 ])
 
 lr_params = {
@@ -90,6 +93,7 @@ lr_params = {
     'model__estimator__solver': ['lbfgs', 'saga']
 }
 best_lr, lr_best_params = optimize_model(lr_pipe, lr_params, X_train, y_train)
+
 
 stacking_clf = StackingClassifier(
     estimators=[
@@ -99,10 +103,13 @@ stacking_clf = StackingClassifier(
         ('lr', best_lr)
     ],
 
-    final_estimator=LogisticRegression(class_weight='balanced'),
-    cv=5,
-    n_jobs=-1
+    final_estimator=LogisticRegression(class_weight='balanced', max_iter=1000, random_state=42),  
+    cv=StratifiedKFold(5, shuffle=True, random_state=42), 
+    n_jobs=-1,
+    passthrough=False 
 )
+
+
 
 stacking_clf.fit(X_train, y_train)
 y_score = stacking_clf.predict_proba(X_test)
@@ -163,7 +170,6 @@ legend = plt.legend(
     fontsize=22,  
     title='Models',
     title_fontsize=22,
-    
     bbox_to_anchor=(0.98,0.01),  
     borderpad=0.4,                
     handlelength=2.5,             

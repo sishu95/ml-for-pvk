@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 # 1. Read Data
-data = pd.read_csv("new/ML code/data.csv")
+data = pd.read_csv("/data/users/PVK/data.csv")
 data.head()
 X = data.iloc[:, 0:13].values  
 Y = data.iloc[:, 14:15].values   

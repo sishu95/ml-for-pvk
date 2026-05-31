@@ -14,7 +14,7 @@ from sklearn.linear_model import Ridge, RidgeCV
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
-data = pd.read_csv("new/MLcode/data.csv")
+data = pd.read_csv("/data/users/lsy/PVK/new/260527/data.csv")
 X = data.iloc[:, 0:13].values
 Y = data.iloc[:, 14].values  
 X_new = np.delete(X, [4, 5], axis=1)
@@ -30,7 +30,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 def optimize_regression_model(pipeline, params, X, y, model_name=""):
 
-    n_jobs = 1
+    n_jobs = -1
 
     grid = GridSearchCV(
         estimator=pipeline,

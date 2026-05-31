@@ -12,7 +12,7 @@ from imblearn.over_sampling import SMOTE
 from sklearn.multiclass import OneVsRestClassifier
 from imblearn.pipeline import Pipeline as ImbPipeline
 
-data = pd.read_csv("new/MLcode/data.csv")
+data = pd.read_csv("/data/users/PVK/data.csv")
 X = data.iloc[:, 0:13].values
 Y = data.iloc[:, 14].values  
 X_new = np.delete(X, [4, 5], axis=1)
@@ -33,7 +33,7 @@ def optimize_model(pipeline, params, X, y):
         estimator=pipeline,
         param_grid=params,
         scoring='roc_auc_ovr', 
-        cv=StratifiedKFold(5, shuffle=True, random_state=42),
+        cv=StratifiedKFold(5, shuffle=True, random_state=100),
         n_jobs=-1,
         error_score='raise'
     )
@@ -41,9 +41,9 @@ def optimize_model(pipeline, params, X, y):
     return grid.best_estimator_, grid.best_params_
 
 svc_pipe = ImbPipeline([
-    ('sampler', SMOTE(random_state=42)),
+    ('sampler', SMOTE(random_state=84)),
     ('scaler', StandardScaler()),
-    ('model', SVC(probability=True, decision_function_shape='ovr', class_weight='balanced'))
+    ('model', SVC(probability=True, decision_function_shape='ovr', random_state=84))
 ])
 svc_params = {
     'model__C': [0.1, 1, 10],
@@ -56,7 +56,7 @@ print(svc_best_params)
 
 rf_pipe = ImbPipeline([
     ('sampler', SMOTE(random_state=42)),
-    ('model', RandomForestClassifier(class_weight='balanced'))
+    ('model', RandomForestClassifier( random_state=42))
 ])
 rf_params = {
     'model__n_estimators': [200, 400],
@@ -67,21 +67,25 @@ best_rf, rf_best_params = optimize_model(rf_pipe, rf_params, X_train, y_train)
 
 xgb_pipe = ImbPipeline([
     ('sampler', SMOTE(random_state=42)),
+    # 增加 random_state=42
     ('model', XGBClassifier(
         objective='multi:softprob',
-        eval_metric='mlogloss'))
+        eval_metric='mlogloss', 
+        random_state=42))
 ])
 xgb_params = {
     'model__learning_rate': [0.05, 0.1],
-    'model__max_depth': [3, 5],
-    'model__subsample': [0.8, 1.0]
+    'model__max_depth': [3, 5, 7],          
+    'model__subsample': [0.8, 1.0],
+    'model__colsample_bytree': [0.6, 0.8, 1.0], 
+    'model__gamma': [0, 0.1, 1]            
 }
 best_xgb, xgb_best_params = optimize_model(xgb_pipe, xgb_params, X_train, y_train)
 
 lr_pipe = ImbPipeline([
-    ('sampler', SMOTE(random_state=42)),
+    ('sampler', SMOTE(random_state=55)),
     ('scaler', StandardScaler()),
-    ('model', OneVsRestClassifier(LogisticRegression(max_iter=10000))) 
+    ('model', OneVsRestClassifier(LogisticRegression(max_iter=10000, random_state=55))) 
 ])
 
 lr_params = {
@@ -90,6 +94,7 @@ lr_params = {
 }
 best_lr, lr_best_params = optimize_model(lr_pipe, lr_params, X_train, y_train)
 
+custom_weights = {0: 1, 1: 1, 2: 5}
 stacking_clf = StackingClassifier(
     estimators=[
         ('svc', best_svc),
@@ -97,17 +102,19 @@ stacking_clf = StackingClassifier(
         ('xgb', best_xgb), 
         ('lr', best_lr)
     ],
-    final_estimator=LogisticRegression(class_weight='balanced', max_iter=1000),
-    cv=5,
-    n_jobs=-1
+   
+    final_estimator=LogisticRegression(class_weight=custom_weights, max_iter=1000, random_state=42),
+    cv=StratifiedKFold(5, shuffle=True, random_state=42),
+    n_jobs=-1,
+    passthrough=False
+  
 )
-
 stacking_clf.fit(X_train, y_train) 
 y_score = stacking_clf.predict_proba(X_test)
 print(f"X_test shape: {X_test.shape}, y_score shape: {y_score.shape}")
 
 background_data = shap.sample(X_train, 100) 
-explainer = shap.KernelExplainer(stacking_clf.predict, background_data)
+explainer = shap.KernelExplainer(stacking_clf.predict_proba, background_data)
 shap_values = explainer.shap_values(X_new)
 
 target_class = 2
@@ -118,7 +125,7 @@ else:
     
 shap_df.to_csv('shap_values.csv', index=False)
 
-mol_data = pd.read_csv("/data/users/lsy/PVK/final/test.csv")  
+mol_data = pd.read_csv("/data/users/PVK/test.csv")  
 X_mol_raw = mol_data.iloc[:, 0:13].values  
 X_mol = np.delete(X_mol_raw, [4, 5], axis=1) 
 
@@ -137,7 +144,7 @@ mol_results = pd.DataFrame({
     "Class2_Probability": mol_proba_class2
 })
 mol_results_sorted = mol_results.sort_values(by="Class2_Probability", ascending=False)
-mol_results_sorted.to_csv("mol_class2_probabilities_named.csv", index=False)
+mol_results_sorted.to_csv("1mol_class2_probabilities_named.csv", index=False)
 
 explainer_proba = shap.KernelExplainer(stacking_clf.predict_proba, background_data)
 shap_values_mol = explainer_proba.shap_values(X_mol)
